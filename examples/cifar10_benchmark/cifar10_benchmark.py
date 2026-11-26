@@ -130,6 +130,8 @@ def main(config: CupcakeConfig) -> None:
         model = ResNet18()
     elif config.model == 'resnet50':
         model = ResNet50()
+    elif config.model == 'resnet101':
+        model = ResNet101()
     elif config.model == 'resnet152':
         model = ResNet152()
     else:

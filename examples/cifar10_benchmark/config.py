@@ -32,7 +32,7 @@ class CupcakeConfig:
     # ── Training ──────────────────────────────────────────────────────────────
     epochs:          int   = field(default_factory=lambda: _env('EPOCHS',       100))
     batch_size:      int   = field(default_factory=lambda: _env('BATCH_SIZE',   256))
-    test_batch_size: int   = field(default_factory=lambda: _env('TEST_BATCH_SIZE', 1000))
+    test_batch_size: int   = field(default_factory=lambda: _env('TEST_BATCH_SIZE', 256))
     # lr is multiplied by hvd.size() inside the script (linear scaling rule).
     # Default 0.0125 × 4 workers = 0.05 effective — matches Tinker.
     lr:              float = field(default_factory=lambda: _env('LR',           0.0125))
