@@ -128,6 +128,50 @@ def add_parser_arguments(parser):
     parser.add_argument('--speed-test', action='store_true', default=False,
                         help='test the training speed')
 
+    # ── Communication straggler (tc) ─────────────────────────────────────────
+    parser.add_argument('--inject-tc', action='store_true', default=False,
+                        help='enable tc HTB bandwidth throttling on straggler rank')
+    parser.add_argument('--inject-sleep', action='store_true', default=False,
+                        help='enable sleep-based communication straggler injection')
+    parser.add_argument('--sleep-target-rank', type=int, default=0,
+                        help='rank that acts as communication straggler (-1 = all ranks)')
+    parser.add_argument('--sleep-prob-on', type=float, default=0.30,
+                        help='Markov probability of entering slow state')
+    parser.add_argument('--sleep-prob-off', type=float, default=0.20,
+                        help='Markov probability of leaving slow state')
+    parser.add_argument('--sleep-check-interval', type=int, default=10,
+                        help='Markov chain re-roll every N inject() calls')
+    parser.add_argument('--sleep-start-after', type=int, default=15,
+                        help='number of steps before straggler injection begins')
+    parser.add_argument('--sleep-duration-ratio', type=float, default=0.5,
+                        help='sleep duration as fraction of recent step duration (sleep mode)')
+    parser.add_argument('--sleep-seed', type=int, default=42,
+                        help='RNG seed for communication straggler Markov chain')
+    parser.add_argument('--tc-interface', type=str, default='enp8s0',
+                        help='network interface for tc bandwidth control')
+    parser.add_argument('--throttle-dst-ip', type=str, default='',
+                        help='destination IP to throttle (empty = all traffic)')
+    parser.add_argument('--tc-bandwidth-max', type=str, default='1000mbit',
+                        help='baseline (fast) bandwidth for tc HTB')
+    parser.add_argument('--tc-bandwidth-ratios', type=float, nargs='+', default=[1.0, 0.1],
+                        help='bandwidth ratios for tc presets (first=fast, rest=slow)')
+
+    # ── Computation straggler (sleep) ─────────────────────────────────────────
+    parser.add_argument('--comp-inject-sleep', action='store_true', default=False,
+                        help='enable sleep-based computation straggler injection')
+    parser.add_argument('--comp-sleep-target-rank', type=int, default=-1,
+                        help='rank that acts as computation straggler (-1 = all ranks)')
+    parser.add_argument('--comp-sleep-prob-on', type=float, default=0.20,
+                        help='Markov probability of entering sleep state')
+    parser.add_argument('--comp-sleep-prob-off', type=float, default=0.20,
+                        help='Markov probability of leaving sleep state')
+    parser.add_argument('--comp-sleep-check-interval', type=int, default=10,
+                        help='Markov chain re-roll every N batches')
+    parser.add_argument('--comp-sleep-duration-ratio', type=float, default=0.4,
+                        help='sleep duration as fraction of recent forward-pass time')
+    parser.add_argument('--comp-sleep-seed', type=int, default=43,
+                        help='RNG seed for computation straggler Markov chain')
+
     parser.add_argument('--scheduler', action='store_true', default=False,
                         help='use scheduler partition')
     parser.add_argument('--scheduler-epoch', type=int, default=20,

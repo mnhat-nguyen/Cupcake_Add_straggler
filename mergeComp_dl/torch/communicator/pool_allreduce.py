@@ -8,10 +8,11 @@ class PoolAllreduce(Communicator):
     def __init__(self, compressor, memory):
         super().__init__(compressor, memory)
         self.name = "PoolAllReduce"
-
+        self.injector = None
 
     def async_send(self, tensors_compressed, ctx):
-        # assert only one tensor in tensors_compressed for allreduce
+        if self.injector is not None:
+            self.injector.inject()
         return allreduce_async(tensors_compressed[0], name=ctx[0], op=Average)
 
 

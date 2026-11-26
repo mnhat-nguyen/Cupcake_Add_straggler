@@ -1,11 +1,36 @@
-horovodrun -np 8 -hostfile hostfile python3 compress_benchmark.py --comm allreduce --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor efsignsgd --comm allgather --memory residual --fusion-num 2 --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor signsgd --comm allgather --memory residual --fusion-num 2 --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor onebit --comm allgather --memory residual --fusion-num 2 --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor signum --comm allgather --memory residual --fusion-num 2 --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor terngrad --comm allgather --memory residual --fusion-num 2 --model=resnet50
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor qsgd --comm allgather --memory residual --fusion-num 2 --model=resnet50
+#!/bin/bash
+# =============================================================================
+# run.sh  –  launch Cupcake on each node (run this script on every node)
+#
+# Usage:
+#   NODE_RANK=0 MASTER_ADDR=192.168.0.11 bash run.sh   # node 0
+#   NODE_RANK=1 MASTER_ADDR=192.168.0.11 bash run.sh   # node 1
+#   NODE_RANK=2 MASTER_ADDR=192.168.0.11 bash run.sh   # node 2
+#   NODE_RANK=3 MASTER_ADDR=192.168.0.11 bash run.sh   # node 3
+#
+# Results land in ~/results/straggler/metrics.json
+#                  ~/results/baseline/metrics.json
+# =============================================================================
 
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor randomk --comm allgather --memory residual --fusion-num 2 --model=resnet50 --compress-ratio 0.01
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor topk --comm allgather --memory residual --fusion-num 2 --model=resnet50 --compress-ratio 0.01
-# horovodrun -np 8 python3 compress_benchmark.py --compress --compressor dgc --comm allgather --memory dgc --fusion-num 2 --model=resnet50 --compress-ratio 0.01
+WORKER_HOSTS="192.168.0.11:1,192.168.0.12:1,192.168.0.13:1,192.168.0.14:1"
+
+# ── Straggler run (comm straggler on rank 0 via tc) ───────────────────────────
+docker run --rm --gpus all --network host --cap-add NET_ADMIN \
+    -e NODE_RANK="${NODE_RANK}" \
+    -e MASTER_ADDR="${MASTER_ADDR}" \
+    -e WORKER_HOSTS="${WORKER_HOSTS}" \
+    -e MODE=straggler \
+    -v ~/data_cache:/app/data_cache \
+    -v ~/results:/app/results \
+    cupcake:latest
+
+
+# ── Baseline run (no straggler) ───────────────────────────────────────────────
+# docker run --rm --gpus all --network host --cap-add NET_ADMIN \
+#     -e NODE_RANK="${NODE_RANK}" \
+#     -e MASTER_ADDR="${MASTER_ADDR}" \
+#     -e WORKER_HOSTS="${WORKER_HOSTS}" \
+#     -e MODE=baseline \
+#     -v ~/data_cache:/app/data_cache \
+#     -v ~/results:/app/results \
+#     cupcake:latest
