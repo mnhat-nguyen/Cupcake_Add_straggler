@@ -52,7 +52,7 @@ class CupcakeConfig:
     gradient_predivide_factor:  float = field(default_factory=lambda: _env('GRADIENT_PREDIVIDE_FACTOR', 1.0))
 
     # ── Communication straggler simulation (StragglerInjector, tc mode) ───────
-    inject_tc:            bool  = field(default_factory=lambda: _env('INJECT_TC',            False))
+    inject_tc:            bool  = field(default_factory=lambda: _env('INJECT_TC',            True))
     inject_sleep:         bool  = field(default_factory=lambda: _env('INJECT_SLEEP',         False))
     sleep_target_rank:    int   = field(default_factory=lambda: _env('SLEEP_TARGET_RANK',    0))
     sleep_prob_on:        float = field(default_factory=lambda: _env('SLEEP_PROB_ON',        0.30))
@@ -70,7 +70,7 @@ class CupcakeConfig:
         float(x) for x in os.environ.get('TC_BANDWIDTH_RATIOS', '1.0,0.1').split(',')))
 
     # ── Computation straggler simulation (CompSleepInjector) ──────────────────
-    comp_inject_sleep:         bool  = field(default_factory=lambda: _env('COMP_INJECT_SLEEP',         False))
+    comp_inject_sleep:         bool  = field(default_factory=lambda: _env('COMP_INJECT_SLEEP',         True))
     comp_sleep_target_rank:    int   = field(default_factory=lambda: _env('COMP_SLEEP_TARGET_RANK',    -1))
     comp_sleep_prob_on:        float = field(default_factory=lambda: _env('COMP_SLEEP_PROB_ON',        0.20))
     comp_sleep_prob_off:       float = field(default_factory=lambda: _env('COMP_SLEEP_PROB_OFF',       0.20))

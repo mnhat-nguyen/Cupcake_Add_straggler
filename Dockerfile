@@ -37,9 +37,8 @@ RUN mkdir -p /root/.ssh /run/sshd && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Build Horovod with NCCL + MPI (compiled from source — takes a few minutes)
-RUN HOROVOD_GPU_OPERATIONS=NCCL \
-    HOROVOD_WITH_PYTORCH=1 \
+# Build Horovod with MPI + Gloo (compiled from source — takes a few minutes)
+RUN HOROVOD_WITH_PYTORCH=1 \
     HOROVOD_WITHOUT_TENSORFLOW=1 \
     HOROVOD_WITHOUT_MXNET=1 \
     pip install --no-cache-dir horovod[pytorch]
