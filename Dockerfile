@@ -18,11 +18,12 @@ FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
 
 WORKDIR /app
 
-# System dependencies (MPI + SSH for Horovod multi-node + tc for straggler)
+# System dependencies (MPI + SSH for Horovod multi-node + tc for straggler + build tools for Horovod)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libopenmpi-dev openmpi-bin \
         openssh-server openssh-client \
         iproute2 net-tools iputils-ping procps \
+        cmake g++ gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Passwordless SSH between nodes (all nodes share the same keypair)
