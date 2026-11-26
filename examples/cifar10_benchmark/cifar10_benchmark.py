@@ -1,4 +1,4 @@
-'''Train CIFAR10 with PyTorch + Horovod + Cupcake compression.'''
+'''Train CIFAR10 with PyTorch + DDP + Cupcake compression.'''
 import time
 import json
 import os
@@ -11,14 +11,18 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import torch.utils.data.distributed
-import horovod.torch as hvd
+import torch.distributed as dist
 
 from models import *
 import torchvision
 import torchvision.transforms as transforms
 
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_root_dir   = os.path.dirname(os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)   # models, utils, config
+sys.path.insert(0, _root_dir)     # mergeComp_dl, straggler_injector, comp_sleep_injector
+
 from utils import progress_bar
-sys.path.append("../../")
 from mergeComp_dl.torch.helper import wrap_compress_optimizer
 from straggler_injector import StragglerInjector
 from comp_sleep_injector import CompSleepInjector
@@ -95,19 +99,30 @@ def evaluate(model, criterion, test_loader):
             total   += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            if hvd.rank() == 0:
+            if dist.get_rank() == 0:
                 progress_bar(batch_idx, len(test_loader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                              % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
-    correct_t = hvd.allreduce(torch.tensor(correct, dtype=torch.float32), op=hvd.Sum)
-    total_t   = hvd.allreduce(torch.tensor(total,   dtype=torch.float32), op=hvd.Sum)
+    correct_t = torch.tensor(correct, dtype=torch.float32, device='cuda')
+    total_t   = torch.tensor(total,   dtype=torch.float32, device='cuda')
+    dist.all_reduce(correct_t, op=dist.ReduceOp.SUM)
+    dist.all_reduce(total_t,   op=dist.ReduceOp.SUM)
     return test_loss / len(test_loader), 100.0 * correct_t.item() / total_t.item()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(config: CupcakeConfig) -> None:
-    hvd.init()
+    rank       = int(os.environ.get('RANK',       0))
+    world_size = int(os.environ.get('WORLD_SIZE', 1))
+    local_rank = int(os.environ.get('LOCAL_RANK', 0))
+
+    if world_size > 1:
+        dist.init_process_group('nccl')
+
+    torch.cuda.set_device(local_rank)
+    cudnn.benchmark = True
+    torch.set_num_threads(1)
 
     # ── Model ─────────────────────────────────────────────────────────────────
     print('==> Building model..')
@@ -120,17 +135,15 @@ def main(config: CupcakeConfig) -> None:
     else:
         sys.exit('Unknown model: ' + config.model)
 
+    model.cuda()
+
+    # Broadcast parameters from rank 0 to ensure all workers start identically
+    if world_size > 1:
+        for param in model.parameters():
+            dist.broadcast(param.data, src=0)
+
     best_acc    = 0
     start_epoch = 0
-
-    lr_scaler = hvd.size() if not config.use_adasum else 1
-    torch.cuda.set_device(hvd.local_rank())
-    model.cuda()
-    cudnn.benchmark = True
-    if config.use_adasum and hvd.nccl_built():
-        lr_scaler = hvd.local_size()
-
-    torch.set_num_threads(1)
 
     # ── Data ──────────────────────────────────────────────────────────────────
     print('==> Preparing data..')
@@ -145,12 +158,12 @@ def main(config: CupcakeConfig) -> None:
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
 
-    data_root = os.path.join(config.data_root, 'cifar10-data-%d' % hvd.rank())
+    data_root = os.path.join(config.data_root, 'cifar10-data-%d' % rank)
 
     train_dataset = torchvision.datasets.CIFAR10(
         root=data_root, train=True, download=True, transform=transform_train)
     train_sampler = torch.utils.data.distributed.DistributedSampler(
-        train_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+        train_dataset, num_replicas=world_size, rank=rank)
     train_loader  = torch.utils.data.DataLoader(
         train_dataset, batch_size=config.batch_size, sampler=train_sampler,
         num_workers=1, pin_memory=True)
@@ -158,7 +171,7 @@ def main(config: CupcakeConfig) -> None:
     test_dataset = torchvision.datasets.CIFAR10(
         root=data_root, train=False, download=True, transform=transform_test)
     test_sampler = torch.utils.data.distributed.DistributedSampler(
-        test_dataset, num_replicas=hvd.size(), rank=hvd.rank())
+        test_dataset, num_replicas=world_size, rank=rank)
     test_loader  = torch.utils.data.DataLoader(
         test_dataset, batch_size=config.test_batch_size, sampler=test_sampler,
         num_workers=1, pin_memory=True)
@@ -174,23 +187,21 @@ def main(config: CupcakeConfig) -> None:
 
     # ── Optimizer ─────────────────────────────────────────────────────────────
     criterion = nn.CrossEntropyLoss()
+    lr_scaler = world_size
     if config.adam:
-        optimizer = optim.Adam(model.parameters(), lr=config.lr * hvd.size())
+        optimizer = optim.Adam(model.parameters(), lr=config.lr * world_size)
     else:
         optimizer = optim.SGD(model.parameters(), momentum=config.momentum,
                               lr=config.lr * lr_scaler, weight_decay=config.weight_decay)
 
-    hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-    hvd.broadcast_optimizer_state(optimizer, root_rank=0)
-
-    # config is passed directly — wrap_compress_optimizer uses duck typing on attrs
+    # config passed directly — wrap_compress_optimizer uses duck typing on attrs
     optimizer, grc = wrap_compress_optimizer(model, optimizer, config)
 
     # ── Straggler injectors ────────────────────────────────────────────────────
     comm_injector = None
     comp_injector = None
 
-    is_comm_target = (config.sleep_target_rank == -1 or hvd.rank() == config.sleep_target_rank)
+    is_comm_target = (config.sleep_target_rank == -1 or rank == config.sleep_target_rank)
     if (config.inject_tc or config.inject_sleep) and is_comm_target:
         comm_injector = StragglerInjector(
             prob_on         = config.sleep_prob_on,
@@ -206,7 +217,7 @@ def main(config: CupcakeConfig) -> None:
             bandwidth_ratios= config.tc_bandwidth_ratios,
         )
         mode = 'tc' if config.inject_tc else 'sleep'
-        print(f'[straggler] {mode} injection ENABLED on rank {hvd.rank()} '
+        print(f'[straggler] {mode} injection ENABLED on rank {rank} '
               f'prob_on={config.sleep_prob_on} prob_off={config.sleep_prob_off} '
               f'iface={config.tc_interface} bw_max={config.tc_bandwidth_max}')
 
@@ -214,16 +225,16 @@ def main(config: CupcakeConfig) -> None:
         grc.injector = comm_injector
 
     is_comp_target = (config.comp_sleep_target_rank == -1
-                      or hvd.rank() == config.comp_sleep_target_rank)
+                      or rank == config.comp_sleep_target_rank)
     if config.comp_inject_sleep and is_comp_target:
         comp_injector = CompSleepInjector(
             prob_on        = config.comp_sleep_prob_on,
             prob_off       = config.comp_sleep_prob_off,
             check_interval = config.comp_sleep_check_interval,
             duration_ratio = config.comp_sleep_duration_ratio,
-            seed           = config.comp_sleep_seed + hvd.rank(),
+            seed           = config.comp_sleep_seed + rank,
         )
-        print(f'[comp-straggler] sleep injection ENABLED on rank {hvd.rank()} '
+        print(f'[comp-straggler] sleep injection ENABLED on rank {rank} '
               f'prob_on={config.comp_sleep_prob_on} prob_off={config.comp_sleep_prob_off}')
 
     # ── Main loop ──────────────────────────────────────────────────────────────
@@ -255,7 +266,7 @@ def main(config: CupcakeConfig) -> None:
                 'p99_ms':             round(p99, 2),
             })
 
-            if hvd.rank() == 0:
+            if rank == 0:
                 with open(os.path.join(config.results_dir, 'metrics.json'), 'w') as f:
                     json.dump(metrics, f, indent=2)
 
@@ -272,15 +283,17 @@ def main(config: CupcakeConfig) -> None:
             if config.compress:
                 grc.memory.update_lr(optimizer.param_groups[0]['lr'])
 
+    if world_size > 1:
+        dist.destroy_process_group()
+
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='PyTorch CIFAR10 Training (Cupcake)',
+        description='PyTorch CIFAR10 Training (Cupcake + DDP)',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    # All args are optional — CupcakeConfig provides defaults (also env-var overridable)
     parser.add_argument('--model',           type=str)
     parser.add_argument('--batch_size',      type=int)
     parser.add_argument('--test_batch_size', type=int)

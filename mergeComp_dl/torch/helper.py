@@ -188,11 +188,6 @@ def add_parser_arguments(parser):
 
 def wrap_compress_optimizer(model, optimizer, args):
     if args.compress:
-        """
-        compressor: dgc, efsignsgd, fp16, none, onebit, qsgd, randomk, signsgd, signum, terngrad, threshold, topk
-        memory: dgc, none, residual, 1bitadam.   Note: 1bitadam is for Adam
-        comm: allreduce, allgather, ps
-        """
         params = {
             'compressor': args.compressor,
             'memory': args.memory,
@@ -206,15 +201,10 @@ def wrap_compress_optimizer(model, optimizer, args):
         compress_config = (1, 0)
 
         from .horovod.optimizer import DistributedOptimizer
-        optimizer = DistributedOptimizer(optimizer, compression=grc, named_parameters=model.named_parameters(), compress_config=compress_config)
-
+        optimizer = DistributedOptimizer(optimizer, compression=grc,
+                                         named_parameters=model.named_parameters(),
+                                         compress_config=compress_config)
         return optimizer, grc
     else:
-        # Horovod: (optional) compression algorithm.
-        compression = hvd.Compression.fp16 if args.fp16_allreduce else hvd.Compression.none
-        optimizer = hvd.DistributedOptimizer(optimizer,
-                                         named_parameters=model.named_parameters(),
-                                         compression=compression,
-                                         op=hvd.Adasum if args.use_adasum else hvd.Average,
-                                         gradient_predivide_factor=args.gradient_predivide_factor)
+        # No compression — gradients must be synced externally (e.g. DDP or manual dist.all_reduce)
         return optimizer, None

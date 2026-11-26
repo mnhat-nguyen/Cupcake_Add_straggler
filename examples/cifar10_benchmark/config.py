@@ -47,10 +47,6 @@ class CupcakeConfig:
     comm:                       str   = field(default_factory=lambda: _env('COMM',                'allreduce'))
     fusion_num:                 int   = field(default_factory=lambda: _env('FUSION_NUM',          2))
     compress_ratio:             float = field(default_factory=lambda: _env('COMPRESS_RATIO',      0.01))
-    fp16_allreduce:             bool  = field(default_factory=lambda: _env('FP16_ALLREDUCE',      False))
-    use_adasum:                 bool  = field(default_factory=lambda: _env('USE_ADASUM',          False))
-    gradient_predivide_factor:  float = field(default_factory=lambda: _env('GRADIENT_PREDIVIDE_FACTOR', 1.0))
-
     # ── Communication straggler simulation (StragglerInjector, tc mode) ───────
     inject_tc:            bool  = field(default_factory=lambda: _env('INJECT_TC',            True))
     inject_sleep:         bool  = field(default_factory=lambda: _env('INJECT_SLEEP',         False))

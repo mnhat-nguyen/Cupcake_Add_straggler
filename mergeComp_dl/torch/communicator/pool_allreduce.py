@@ -1,7 +1,5 @@
-import torch
+import torch.distributed as dist
 from mergeComp_dl.torch import Communicator
-from horovod.torch import allreduce_async, synchronize
-from horovod.torch.mpi_ops import Average
 
 
 class PoolAllreduce(Communicator):
@@ -13,10 +11,12 @@ class PoolAllreduce(Communicator):
     def async_send(self, tensors_compressed, ctx):
         if self.injector is not None:
             self.injector.inject()
-        return allreduce_async(tensors_compressed[0], name=ctx[0], op=Average)
-
+        tensor = tensors_compressed[0]
+        work = dist.all_reduce(tensor, op=dist.ReduceOp.SUM, async_op=True)
+        return (work, tensor)
 
     def wait_receive(self, handle, ctx):
-        output = [synchronize(handle)]
-        return [self.compressor.decompress(output, ctx)]
-
+        work, tensor = handle
+        work.wait()
+        tensor.div_(dist.get_world_size())
+        return [self.compressor.decompress([tensor], ctx)]
