@@ -127,3 +127,15 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Project-specific
+data/
+examples/cifar10_benchmark/data/
+results/
+checkpoint/
+checkpoints/
+*.pt
+*.pth
+logs/
+*.tar
+.DS_Store
