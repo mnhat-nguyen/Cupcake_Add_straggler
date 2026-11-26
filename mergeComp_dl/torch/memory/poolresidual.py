@@ -1,15 +1,14 @@
 import torch
-import horovod.torch as hvd
+import torch.distributed as dist
 
 from .memory_pool import MemoryPool
 
 
 class PoolResidualMemory(MemoryPool):
-    #TODO: tune beta and gamma to increase accurary
     def __init__(self, named_parameters, fusion_num=2, beta=0.9, gamma=1.0):
         self.beta = beta
         self.gamma = gamma
-        self.world_size = hvd.size()
+        self.world_size = dist.get_world_size() if dist.is_initialized() else 1
         super().__init__(named_parameters, fusion_num)
 
 

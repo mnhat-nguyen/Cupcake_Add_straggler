@@ -1,6 +1,5 @@
 import sys
 import torch
-import horovod.torch as hvd
 
 
 def grace_from_params(params):

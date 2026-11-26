@@ -1,7 +1,7 @@
 import torch
+import torch.distributed as dist
 from abc import ABC, abstractmethod
 
-import horovod.torch as hvd
 from mergeComp_dl.torch import Memory
 import time
 
@@ -19,8 +19,8 @@ class MemoryPool(Memory):
         self.bp_param_names = []
         self.compress_name = {}
         self.shapes = {}
-        self.world_size = hvd.size()
-        self.local_size = hvd.size()
+        self.world_size = dist.get_world_size() if dist.is_initialized() else 1
+        self.local_size = self.world_size
         self.hierarchical = (self.local_size > 1) and (self.world_size > self.local_size)
         self.initialize(named_parameters)
 
