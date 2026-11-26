@@ -36,6 +36,7 @@ TC_INTERFACE="${TC_INTERFACE:-enp8s0}"
 
 # ── Export training config as env vars (CupcakeConfig reads via _env()) ──────
 export MODEL="${MODEL:-resnet101}"
+export DATA_ROOT="${DATA_ROOT:-/app/data_cache}"
 export EPOCHS="${EPOCHS:-100}"
 export BATCH_SIZE="${BATCH_SIZE:-256}"
 export LR="${LR:-0.0125}"
