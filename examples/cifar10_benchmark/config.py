@@ -46,7 +46,7 @@ class CupcakeConfig:
     memory:                     str   = field(default_factory=lambda: _env('MEMORY',              'residual'))
     comm:                       str   = field(default_factory=lambda: _env('COMM',                'allreduce'))
     fusion_num:                 int   = field(default_factory=lambda: _env('FUSION_NUM',          2))
-    compress_ratio:             float = field(default_factory=lambda: _env('COMPRESS_RATIO',      0.01))
+    compress_ratio:             float = field(default_factory=lambda: _env('COMPRESS_RATIO',      0.05))
     # ── Communication straggler simulation (StragglerInjector, tc mode) ───────
     inject_tc:            bool  = field(default_factory=lambda: _env('INJECT_TC',            True))
     inject_sleep:         bool  = field(default_factory=lambda: _env('INJECT_SLEEP',         False))
