@@ -38,7 +38,7 @@ class MemoryPool(Memory):
                 self.grad_size += size
                 self.tensor_num += 1
                 self.param_groups[name] = p
-                self.shapes[name] = p.grad.size()
+                self.shapes[name] = p.size()
                 offset += size
 
         self.grads = torch.zeros(offset).cuda()
